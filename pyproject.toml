@@ -1,6 +1,6 @@
 [project]
 name = "Flow-Line-Art"
-version = "1.1.0"
+version = "1.1.1"
 description = "Print a photo as one unbroken line whose width draws the picture."
 requires-python = ">=3.12"
 readme = "docs/PLUGIN.md"

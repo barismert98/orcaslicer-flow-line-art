@@ -164,6 +164,13 @@ def test_saved_job_from_1_0_1_still_builds():
     assert params.two_filaments and image is None
 
 
+def test_empty_last_slice_text_covers_every_printer_and_lives_in_one_place(loaded):
+    page = loaded.capability(PAGE).get_ui()
+    expected = "No result yet. Bambu Lab printers: slice the base. Other printers: export the G-code. Then check here."
+    assert page.count(expected) == 1
+    assert "No slice yet" not in page
+
+
 def test_page_has_bridge(loaded):
     assert "orca.postMessage" in loaded.capability(PAGE).get_ui()
 

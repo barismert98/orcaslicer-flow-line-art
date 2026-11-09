@@ -127,7 +127,7 @@ _PAGE = r"""<!doctype html>
     </div>
     <div class="ol-card">
       <h2>Last slice</h2>
-      <div class="ol-muted" id="lastSlice">No slice yet. Slice the base, then check here.</div>
+      <div class="ol-muted" id="lastSlice"></div>
     </div>
   </div>
 
@@ -143,6 +143,8 @@ var fields = ["mode","base_filament","art_filament","color_change","diameter","n
 var image = null, timer = null, ready = false, snapSize = false;
 var source = null, encodeTimer = null, filaments = [], filamentKey = "";
 var printer = null, selected = null;
+// Slicing alone only runs the plugin on Bambu Lab printers; others run it at export or upload.
+var NO_RESULT_TEXT = "No result yet. Bambu Lab printers: slice the base. Other printers: export the G-code. Then check here.";
 var send = function (m) { window.orca.postMessage(m); };
 var el = function (i) { return document.getElementById(i); };
 
@@ -244,7 +246,7 @@ function renderChecks() {
 
 function renderStatus(status) {
   var e = el("lastSlice");
-  if (!status) { e.textContent = "No slice yet. Slice the base, then check here."; e.className = "ol-muted"; return; }
+  if (!status) { e.textContent = NO_RESULT_TEXT; e.className = "ol-muted"; return; }
   e.textContent = status.message;
   e.className = status.ok ? "ol-muted" : "ol-error";
 }
@@ -455,6 +457,7 @@ el("useStep").addEventListener("click", function () {
 // The presets change on other tabs, so re-read them when this tab comes back and while it is shown.
 document.addEventListener("visibilitychange", function () { if (!document.hidden) send({ cmd: "state" }); });
 setInterval(function () { if (!document.hidden) send({ cmd: "state" }); }, 4000);
+renderStatus(null);
 send({ cmd: "init" });
 </script>
 </body>

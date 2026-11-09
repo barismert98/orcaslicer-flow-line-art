@@ -12,3 +12,4 @@
 - 2026-11-09: 1.0.1: the tab shows a simplified moon-spiral icon, made for 20 px (`src/flow_line_art/icon.svg`). Published on Orca Cloud; the file published as 1.0.0 does not have it.
 - 2026-11-09: 1.1.0: Workbench layout for the tab: one screen, fixed Save, folded advanced settings, a checklist read from the presets, separate stats, a sharper preview. Job output is unchanged.
 - 2026-11-09: 1.1.0 published on Orca Cloud, review low risk: new one-screen interface, larger line preview, advanced settings folded away, a live checklist before slicing, and the save button always in view.
+- 2026-11-09: 1.1.1: the empty Last slice panel says that Bambu Lab printers need a slice and other printers need a G-code export, after a user comment on Orca Cloud.
