@@ -1,0 +1,12 @@
+[project]
+name = "Flow-Line-Art"
+version = "1.1.0"
+description = "Print a photo as one unbroken line whose width draws the picture."
+requires-python = ">=3.12"
+readme = "docs/PLUGIN.md"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+dependencies = []
+
+[tool.orcaslicer]
+package = "flow_line_art"
