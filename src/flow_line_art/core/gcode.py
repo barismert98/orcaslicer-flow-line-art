@@ -1,4 +1,4 @@
-"""Turns an Art into G-code lines placed on the bed at a given centre."""
+"""Turns an Art into G-code lines placed on the bed at a given center."""
 from __future__ import annotations
 
 from .art import Art
@@ -37,7 +37,7 @@ def emit(
     `debt_before` is how far the filament is retracted on entry. `e_after` is the
     extruder position the following G-code expects, restored here in absolute mode.
     `upper_layers` holds (z, marker comment lines) of further art layers; each retraces
-    the previous one backward, so the line never has to travel.
+    the previous one backward, so the line only travels where a layer leaves part of it out.
     """
     m = art.machine
     hop = max(m.z_hop, 0.4)
@@ -70,24 +70,45 @@ def emit(
     written = position
     points, amounts = art.points, extrusion_lengths(art)
 
-    def draw() -> None:
+    def draw(start: int, end: int) -> None:
         nonlocal exact, written
-        for (x, y), amount in zip(points[1:], amounts):
-            exact += amount
+        step = 1 if end > start else -1
+        for index in range(start, end, step):
+            exact += amounts[min(index, index + step)]
             rounded = round(exact, 5)
             value = rounded - written if relative_e else rounded
             written = rounded
+            x, y = points[index + step]
             lines.append(f"G1 X{_num(cx + x, 3)} Y{_num(cy + y, 3)} E{_num(value, 5)}")
 
-    draw()
-    top_z = z
-    for top_z, markers in upper_layers:
-        lines.extend(markers)
-        lines.append(f"G1 Z{_num(top_z, 3)} F{Z_FEED}")
+    def cross_to(index: int, layer_z: float) -> None:
+        """Lifts over everything printed so far, moves to a run's start and primes."""
+        nonlocal position
+        position = written
+        move_e(-m.retract_length, m.retract_speed)
+        lines.append(f"G1 Z{_num(layer_z + hop, 3)} F{Z_FEED}")
+        x, y = points[index]
+        lines.append(f"G1 X{_num(cx + x, 3)} Y{_num(cy + y, 3)} F{_num(m.travel_speed * 60, 0)}")
+        lines.append(f"G1 Z{_num(layer_z, 3)} F{Z_FEED}")
+        move_e(m.retract_length, m.deretract_speed)
         lines.append(f"G1 F{_num(art.speed * 60, 0)}")
-        points, amounts = points[::-1], amounts[::-1]
-        draw()
 
+    levels = [(z, ())] + list(upper_layers)
+    nozzle_z = z
+    at = 0
+    for (layer_z, markers), runs in zip(levels, art.drawn_layers(len(levels))):
+        lines.extend(markers)
+        for start, end in runs:
+            if start != at:
+                cross_to(start, layer_z)
+            elif layer_z != nozzle_z:
+                lines.append(f"G1 Z{_num(layer_z, 3)} F{Z_FEED}")
+                lines.append(f"G1 F{_num(art.speed * 60, 0)}")
+            nozzle_z = layer_z
+            draw(start, end)
+            at = end
+
+    top_z = levels[-1][0]
     position = written
     move_e(-m.retract_length, m.retract_speed)
     lines.append(f"G1 Z{_num(top_z + hop, 3)} F{Z_FEED}")

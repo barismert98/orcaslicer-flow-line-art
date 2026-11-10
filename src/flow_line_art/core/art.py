@@ -5,11 +5,16 @@ import math
 from dataclasses import asdict, dataclass, replace
 from typing import Callable
 
-from . import toolpath
+from . import relief, shape as shape_module, tone_prep, toolpath
 from .image import GrayImage, step_image, tone
 
-MODES = ("spiral", "raster", "hilbert", "calibration")
+MODES = ("spiral", "raster", "hilbert", "relief", "calibration")
 COLOR_CHANGES = ("none", "pause")
+CONTRAST_RANGE = (0.5, 3.0)
+GAMMA_RANGE = (0.2, 3.0)
+WIDTH_MIN_PER_NOZZLE = 0.5
+WIDTH_MAX_PER_NOZZLE = 2.0
+WIDTH_MAX_PER_PITCH = 1.1
 
 
 class ArtError(ValueError):
@@ -101,11 +106,37 @@ class Params:
     layer_height: float = 0.0  # 0: whatever the slice uses
     base_filament: int = 1  # 1-based slot in the project
     art_filament: int = 1
+    auto_tone: bool = False  # what a job saved without this field means; the tab starts with it on
+    shape: str = ""  # empty in a job saved before shapes existed: the mode then decides, as it did
+    width: float = 0.0  # mm, used with `shape`
+    height: float = 0.0
+
+    def _require_known_shape(self) -> None:
+        if self.shape not in shape_module.NAMES:
+            raise ArtError(f"Unknown shape: {self.shape}. Choose a shape in the tab and press the save button again.")
+
+    @property
+    def outline(self) -> shape_module.Shape:
+        if self.shape:
+            self._require_known_shape()
+            return shape_module.make(self.shape, self.width, self.height)
+        return shape_module.make("square" if self.mode == "hilbert" else "circle", self.diameter, self.diameter)
+
+    @property
+    def edge(self) -> float:
+        """How far the line's center stays inside the outline."""
+        return self.margin + self.width_max / 2
+
+    @property
+    def half_extents(self) -> tuple:
+        """How far the line's center reaches from the middle, sideways and up."""
+        outline = self.outline
+        return (outline.half_width - self.margin - self.width_max / 2, outline.half_height - self.margin - self.width_max / 2)
 
     @property
     def square(self) -> bool:
         """A square base of side `diameter`, instead of a disc."""
-        return self.mode == "hilbert"
+        return self.outline.name == "square"
 
     @property
     def two_filaments(self) -> bool:
@@ -113,8 +144,8 @@ class Params:
 
     @property
     def half_span(self) -> float:
-        """How far the line's centre reaches from the middle of the base."""
-        return self.diameter / 2 - self.margin - self.width_max / 2
+        """How far the line's center reaches from the middle of the base."""
+        return self.half_extents[0]
 
     @classmethod
     def from_dict(cls, data: dict) -> "Params":
@@ -129,22 +160,35 @@ class Params:
     def to_dict(self) -> dict:
         return asdict(self)
 
+    def check_slider_limits(self) -> None:
+        """For settings coming from the tab. Not part of `validate`: older saved jobs outside these limits still build."""
+        if not CONTRAST_RANGE[0] <= self.contrast <= CONTRAST_RANGE[1]:
+            raise ArtError(f"Contrast must be between {CONTRAST_RANGE[0]:g} and {CONTRAST_RANGE[1]:g}.")
+        if not GAMMA_RANGE[0] <= self.gamma <= GAMMA_RANGE[1]:
+            raise ArtError(f"Gamma must be between {GAMMA_RANGE[0]:g} and {GAMMA_RANGE[1]:g}.")
+
     def validate(self, machine: Machine) -> None:
         if self.mode not in MODES:
             raise ArtError(f"Unknown mode: {self.mode}")
+        if self.shape:
+            self._require_known_shape()
+            if self.shape not in shape_module.SHAPES_BY_MODE[self.mode]:
+                raise ArtError(shape_module.UNAVAILABLE_NOTES[self.mode])
+            if min(self.width, self.height) < 10:
+                raise ArtError("Each side of the shape must be at least 10 mm.")
         if self.color_change not in COLOR_CHANGES:
-            raise ArtError(f"Unknown colour change: {self.color_change}")
+            raise ArtError(f"Unknown color change: {self.color_change}")
         if self.diameter < 10:
             raise ArtError("Diameter must be at least 10 mm.")
         if self.pitch <= 0 or self.chord <= 0:
             raise ArtError("Pitch and chord length must be positive.")
         if self.width_min >= self.width_max:
             raise ArtError("Minimum width must be below maximum width.")
-        if self.width_min < 0.5 * machine.nozzle:
-            raise ArtError(f"Minimum width must be at least {0.5 * machine.nozzle:.2f} mm for this nozzle.")
-        if self.width_max > 2.0 * machine.nozzle:
-            raise ArtError(f"Maximum width must be at most {2.0 * machine.nozzle:.2f} mm for this nozzle.")
-        if self.width_max > self.pitch * 1.1:
+        if self.width_min < WIDTH_MIN_PER_NOZZLE * machine.nozzle:
+            raise ArtError(f"Minimum width must be at least {WIDTH_MIN_PER_NOZZLE * machine.nozzle:.2f} mm for this nozzle.")
+        if self.width_max > WIDTH_MAX_PER_NOZZLE * machine.nozzle:
+            raise ArtError(f"Maximum width must be at most {WIDTH_MAX_PER_NOZZLE * machine.nozzle:.2f} mm for this nozzle.")
+        if self.width_max > self.pitch * WIDTH_MAX_PER_PITCH:
             raise ArtError("Maximum width must not exceed the line pitch by more than 10 %.")
         if self.gamma <= 0 or self.contrast <= 0:
             raise ArtError("Gamma and contrast must be positive.")
@@ -162,6 +206,8 @@ class Params:
             raise ArtError("Filament numbers start at 1.")
         if not 1 <= self.art_layers <= 10:
             raise ArtError("Art layers must be between 1 and 10.")
+        if self.mode == "relief" and not relief.MIN_LAYERS <= self.art_layers <= relief.MAX_LAYERS:
+            raise ArtError(f"Relief needs {relief.MIN_LAYERS} to {relief.MAX_LAYERS} line layers.")
         if self.nozzle and not 0.1 <= self.nozzle <= 1.2:
             raise ArtError("Nozzle diameter must be between 0.1 and 1.2 mm.")
         if self.layer_height and not 0.04 <= self.layer_height <= 0.8 * machine.nozzle:
@@ -170,27 +216,52 @@ class Params:
 
 @dataclass(frozen=True)
 class Art:
-    points: list  # centred on the origin
+    points: list  # centered on the origin
     widths: list  # one per segment, len(points) - 1
     layer_height: float
     speed: float  # mm/s, constant along the line
     params: Params
     machine: Machine
+    passes: list | None = None  # layers stacked on each segment; None: every layer covers the whole line
 
     def lengths(self) -> list:
         return [math.dist(a, b) for a, b in zip(self.points, self.points[1:])]
 
+    def drawn_layers(self, count: int) -> list:
+        """Each layer's runs in printing order, as (from point, to point).
+
+        Every other layer goes back over the one below, so the line ends where the next begins.
+        """
+        whole = len(self.widths)
+        layers = []
+        for index in range(count):
+            spans = [(0, whole)] if self.passes is None else relief.runs([stacked > index for stacked in self.passes])
+            layers.append(spans if index % 2 == 0 else [(end, start) for start, end in reversed(spans)])
+        return layers
+
+    def stops(self) -> int:
+        """How many times the nozzle has to lift and cross to reach the next run."""
+        count = 0
+        at = 0
+        for layer in self.drawn_layers(self.params.art_layers):
+            for start, end in layer:
+                count += start != at
+                at = end
+        return count
+
     def stats(self) -> dict:
         lengths = self.lengths()
-        layers = self.params.art_layers
-        total = sum(lengths) * layers
-        volume = sum(w * self.layer_height * l for w, l in zip(self.widths, lengths)) * layers * self.params.flow
+        stacked = self.passes or [self.params.art_layers] * len(lengths)
+        total = sum(l * count for l, count in zip(lengths, stacked))
+        volume = sum(w * self.layer_height * l * count for w, l, count in zip(self.widths, lengths, stacked)) * self.params.flow
+        stops = self.stops()
         return {
             "segments": len(self.widths),
             "length_mm": total,
             "volume_mm3": volume,
             "filament_mm": volume / self.machine.filament_area,
-            "time_s": total / self.speed,
+            "time_s": total / self.speed + stops * relief.SECONDS_PER_STOP,
+            "stops": stops,
             "width_min": min(self.widths),
             "width_max": max(self.widths),
             "speed": self.speed,
@@ -223,42 +294,55 @@ def limited_speed(params: Params, machine: Machine, layer_height: float) -> floa
     return min(params.speed, machine.max_volumetric / (params.width_max * layer_height * params.flow))
 
 
+def _line_path(params: Params, outline: shape_module.Shape, half_x: float, half_y: float) -> list:
+    pitch, chord = params.pitch, params.chord
+    if params.mode == "hilbert":
+        return toolpath.hilbert(half_x, pitch, chord)
+    if params.mode in ("spiral", "relief"):
+        return toolpath.spiral(half_x, pitch, chord) if outline.name == "circle" else toolpath.rectangular_spiral(half_x, half_y, pitch, chord)
+    if outline.name == "circle":
+        return toolpath.raster(half_x, pitch, chord)
+    return toolpath.serpentine(half_y, pitch, chord, lambda y: outline.row_span(y, params.edge))
+
+
 def build(params: Params, image: GrayImage | None, machine: Machine, layer_height: float) -> Art:
     if params.nozzle:
         machine = replace(machine, nozzle=params.nozzle)
     params.validate(machine)
     if layer_height <= 0:
         raise ArtError("Layer height must be positive.")
-    radius = params.half_span
-    if radius <= params.pitch:
-        raise ArtError("The disc is too small for this pitch and width.")
-    if params.ring >= radius:
-        raise ArtError("The ring is wider than the disc.")
+    half_x, half_y = params.half_extents
+    if min(half_x, half_y) <= params.pitch:
+        raise ArtError("The shape is too small for this pitch and width.")
+    if params.ring >= min(half_x, half_y):
+        raise ArtError("The ring is wider than the shape allows.")
+    outline = params.outline
     if params.mode == "calibration":
         params_for_tone = Params(**{**params.to_dict(), "gamma": 1.0, "contrast": 1.0, "invert": False, "ring": 0.0})
         image = step_image(params.steps)
-        points = toolpath.raster(radius, params.pitch, params.chord)
+        points = toolpath.raster(half_x, params.pitch, params.chord)
     else:
         params_for_tone = params
         if image is None:
             raise ArtError("Pick an image first.")
-        image = image.center_square()
-        path = {"spiral": toolpath.spiral, "raster": toolpath.raster, "hilbert": toolpath.hilbert}[params.mode]
-        points = path(radius, params.pitch, params.chord)
+        image = image.center_crop(half_x / half_y)
+        if params.auto_tone:
+            image = tone_prep.prepare(image, inverted=params.invert)
+        points = _line_path(params, outline, half_x, half_y)
 
     widths = []
     lengths = []
     for (ax, ay), (bx, by) in zip(points, points[1:]):
         mx, my = (ax + bx) / 2, (ay + by) / 2
         lengths.append(math.hypot(bx - ax, by - ay))
-        brightness = image.sample((mx / radius + 1) / 2, (1 - my / radius) / 2)
+        brightness = image.sample((mx / half_x + 1) / 2, (1 - my / half_y) / 2)
         wanted = target_width(brightness, params_for_tone)
-        reach = max(abs(mx), abs(my)) if params.square else math.hypot(mx, my)
-        if params_for_tone.ring and reach >= radius - params_for_tone.ring:
+        if params_for_tone.ring and outline.inset(mx, my) - params.edge <= params_for_tone.ring:
             wanted = params_for_tone.width_max
         widths.append(min(max(wanted, params.width_min), params.width_max))
     widths = slew_limited(widths, lengths, params.slew)
-    return Art(points, widths, layer_height, limited_speed(params, machine, layer_height), params, machine)
+    passes = relief.pass_counts(widths, lengths, params.width_min, params.width_max, params.art_layers) if params.mode == "relief" else None
+    return Art(points, widths, layer_height, limited_speed(params, machine, layer_height), params, machine, passes)
 
 
 def hilbert_info(params: Params) -> dict:
@@ -275,4 +359,15 @@ def gamma_from_step(index: int, steps: int) -> float:
     if not 0 < index < steps - 1:
         raise ArtError("Pick a step between the darkest and the lightest.")
     darkness = 1.0 - index / (steps - 1)
-    return math.log(1.0 - darkness) / math.log(0.5)
+    return min(max(math.log(1.0 - darkness) / math.log(0.5), GAMMA_RANGE[0]), GAMMA_RANGE[1])
+
+
+def slider_limits() -> dict:
+    """The limits the tab's sliders use, so the page and the validation share one source."""
+    return {
+        "contrast": list(CONTRAST_RANGE),
+        "gamma": list(GAMMA_RANGE),
+        "width_min_per_nozzle": WIDTH_MIN_PER_NOZZLE,
+        "width_max_per_nozzle": WIDTH_MAX_PER_NOZZLE,
+        "width_max_per_pitch": WIDTH_MAX_PER_PITCH,
+    }

@@ -9,6 +9,7 @@ import orca
 from . import plate
 from .core import art as art_module
 from .core import pipeline, placeholder, preview
+from .core import shape as shape_module
 from .core.image import GrayImage
 from .ui import PAGE_HTML
 
@@ -16,6 +17,7 @@ JOB_FILE = "job.json"
 STATUS_FILE = "last_run.json"
 BASE_NAME = "flow_line_art_disc"
 PREVIEW_SIZE = 640
+STARTING_CONTRAST = 1.2  # read best on the benchmark once automatic tone is on
 
 
 def storage_path(name):
@@ -60,8 +62,17 @@ def stack_heights(params, layer_height):
     return {"base": base, "art": art, "total": base + art}
 
 
+def prime_tower_on():
+    """A preset that does not say counts as on, so nobody gets a warning about nothing."""
+    return str(preset_value("enable_prime_tower")) not in ("0", "false")
+
+
 def printer_state():
-    return {"nozzle": art_module.machine_from_config(preset_value).nozzle, "layer_height": current_layer_height()}
+    return {
+        "nozzle": art_module.machine_from_config(preset_value).nozzle,
+        "layer_height": current_layer_height(),
+        "tower": prime_tower_on(),
+    }
 
 
 def slicing_step_selected():
@@ -74,13 +85,13 @@ def filament_slots():
         names = list(orca.host.preset_bundle().current_filament_preset_names())
     except (RuntimeError, AttributeError):
         names = []
-    colours = re.findall(r"#[0-9A-Fa-f]{6}", str(preset_value("filament_colour") or ""))
-    count = max(len(names), len(colours), 1)
+    colors = re.findall(r"#[0-9A-Fa-f]{6}", str(preset_value("filament_colour") or ""))
+    count = max(len(names), len(colors), 1)
     return [
         {
             "slot": index + 1,
             "name": names[index] if index < len(names) else f"Filament {index + 1}",
-            "colour": colours[index] if index < len(colours) else "#808080",
+            "color": colors[index] if index < len(colors) else "#808080",
         }
         for index in range(count)
     ]
@@ -96,6 +107,19 @@ def disc_on_plate():
     except RuntimeError:
         return False
     return any(BASE_NAME in (obj.input_file or obj.name or "") for obj in objects)
+
+
+def base_record(params, height):
+    """The plate base for these settings. Circles and squares keep the record older versions wrote."""
+    record = {
+        "diameter": params.diameter,
+        "height": height,
+        "square": params.square,
+        "filaments": [params.base_filament, params.art_filament],
+    }
+    if params.outline.name not in ("circle", "square"):
+        record.update(shape=params.outline.name, width=params.outline.width, height=params.outline.height, total_height=height)
+    return record
 
 
 def image_from_message(raw):
@@ -133,16 +157,24 @@ class FlowLineArtPage(orca.pages.PagesPluginCapabilityBase):
     def _init(self, _data):
         machine = art_module.machine_from_config(preset_value)
         nozzle = machine.nozzle
+        size = art_module.Params.diameter
         defaults = art_module.Params(
+            shape="circle",
+            width=size,
+            height=size,
             nozzle=nozzle,
             layer_height=current_layer_height(),
             width_min=round(nozzle * 0.6, 2),
             width_max=round(nozzle * 1.6, 2),
             pitch=round(nozzle * 1.625, 2),
+            auto_tone=True,
+            contrast=STARTING_CONTRAST,
         )
         self.post_message({
             "type": "init",
             "params": defaults.to_dict(),
+            "limits": art_module.slider_limits(),
+            "shapes": shape_module.page_table(),
             "machine": {
                 "nozzle": nozzle,
                 "filament": machine.filament_diameter,
@@ -152,6 +184,7 @@ class FlowLineArtPage(orca.pages.PagesPluginCapabilityBase):
                 "pause": bool(machine.pause_gcode),
             },
             "filaments": filament_slots(),
+            "printer": printer_state(),
             "selected": slicing_step_selected(),
         })
         self._status(None)
@@ -169,6 +202,7 @@ class FlowLineArtPage(orca.pages.PagesPluginCapabilityBase):
     def _build(self, data):
         machine = art_module.machine_from_config(preset_value)
         params = art_module.Params.from_dict(data["params"])
+        params.check_slider_limits()
         slots = len(filament_slots())
         if max(params.base_filament, params.art_filament) > slots:
             raise art_module.ArtError(f"This project has {slots} filament(s). Add more in the filament list first.")
@@ -194,12 +228,8 @@ class FlowLineArtPage(orca.pages.PagesPluginCapabilityBase):
         params, image, art = self._build(data)
         stack = stack_heights(params, art.layer_height)
         height = stack["total"]
-        disc = {
-            "diameter": params.diameter,
-            "height": height,
-            "square": params.square,
-            "filaments": [params.base_filament, params.art_filament],
-        }
+        disc = base_record(params, height)
+        rim = params.outline.outline()
         previous = read_json(JOB_FILE) or {}
         job = pipeline.job_to_dict(params, image)
         job["disc"] = disc
@@ -207,8 +237,7 @@ class FlowLineArtPage(orca.pages.PagesPluginCapabilityBase):
         if params.two_filaments:
             bed = art.machine.bed
             content = placeholder.two_filament_3mf(
-                params.diameter,
-                params.square,
+                rim,
                 stack["base"],
                 height,
                 params.base_filament,
@@ -218,7 +247,7 @@ class FlowLineArtPage(orca.pages.PagesPluginCapabilityBase):
             )
             path = storage_path(BASE_NAME + ".3mf")
         else:
-            content = placeholder.base_stl(params.diameter, params.square, height)
+            content = placeholder.base_stl(rim, height)
             path = storage_path(BASE_NAME + ".stl")
         with open(path, "wb") as handle:
             handle.write(content)
@@ -230,7 +259,7 @@ class FlowLineArtPage(orca.pages.PagesPluginCapabilityBase):
 
     def _gamma(self, data):
         gamma = art_module.gamma_from_step(int(data["index"]), int(data["steps"]))
-        self.post_message({"type": "gamma", "value": round(gamma, 3)})
+        self.post_message({"type": "gamma", "value": round(gamma, 2)})
 
     def _status(self, _data):
         self.post_message({"type": "status", "status": read_json(STATUS_FILE)})

@@ -8,6 +8,9 @@ from . import gcode, splice
 from .image import GrayImage
 
 
+JOB_FORMAT_VERSION = 3  # 2 added the top-level mode, 3 the shape; older jobs still load
+
+
 @dataclass(frozen=True)
 class Outcome:
     text: str
@@ -16,7 +19,7 @@ class Outcome:
 
 
 def job_to_dict(params: art_module.Params, image: GrayImage | None) -> dict:
-    data = {"version": 1, "params": params.to_dict(), "image": None}
+    data = {"version": JOB_FORMAT_VERSION, "mode": params.mode, "params": params.to_dict(), "image": None}
     if image is not None:
         data["image"] = {"width": image.width, "height": image.height, "data": image.to_base64()}
     return data
@@ -39,7 +42,7 @@ def process(text: str, job: dict | None, get_config) -> Outcome:
     lines = text.split("\n")
     try:
         top = splice.locate(lines, params.art_layers)
-        splice.check_disc(top, params.diameter, params.square)
+        splice.check_shape(top, params.outline)
     except splice.NotPlaceholder as reason:
         return Outcome(text, False, f"Not the Flow Line Art disc: {reason}. G-code left as it is.")
 
@@ -58,7 +61,7 @@ def process(text: str, job: dict | None, get_config) -> Outcome:
         raise art_module.ArtError(
             f"The job is for a {params.nozzle:g} mm nozzle but the printer preset uses {machine.nozzle:g} mm."
         )
-    splice.check_bed(top, params.diameter, machine)
+    splice.check_bed(top, params.outline, machine)
     art = art_module.build(params, image, machine, top.height)
     block = gcode.emit(
         art,
@@ -72,8 +75,9 @@ def process(text: str, job: dict | None, get_config) -> Outcome:
         upper_layers=top.upper,
     )
     stats = art.stats()
+    stop_note = f", {stats['stops']} stops" if stats["stops"] else ""
     message = (
         f"Replaced the top {params.art_layers} layer(s) with a {stats['length_mm'] / 1000:.1f} m line from Z{top.z:g}, "
-        f"{stats['time_s'] / 60:.0f} min."
+        f"{stats['time_s'] / 60:.0f} min{stop_note}."
     )
     return Outcome("\n".join(splice.replace(lines, top, block)), True, message)

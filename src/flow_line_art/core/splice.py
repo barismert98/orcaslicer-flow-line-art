@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from .art import Machine
 from .gcode import START_MARK
+from .shape import Shape
 
 _LAYER_MARKS = ("; CHANGE_LAYER", ";LAYER_CHANGE")
 _FEATURE_RE = re.compile(r"^(?:; FEATURE: |;TYPE:)(.+?)\s*$")
@@ -14,7 +15,8 @@ _NOT_OBJECT = {"custom", "prime tower", "wipe tower"}
 _REGION_STOPS = ("; stop printing object", "EXCLUDE_OBJECT_END", "; filament end gcode", "; MACHINE_END_GCODE_START", "; EXECUTABLE_BLOCK_END")
 _WORD_RE = re.compile(r"([A-Z])([-+]?[0-9]*\.?[0-9]+)")
 _DIAMETER_TOLERANCE = 1.5
-_SQUARE_DIAGONAL = 1.2  # width across the 45-degree direction, over the size: disc 1.0, square 1.41
+_DIAGONAL_TOLERANCE = 2.0  # the width across 45 degrees is what tells shapes of the same size apart
+_SHAPE_WORDS = {"circle": "disc"}
 
 
 class NotPlaceholder(Exception):
@@ -187,24 +189,29 @@ def is_done(text: str) -> bool:
     return START_MARK in text
 
 
-def check_disc(top: TopLayer, diameter: float, square: bool = False) -> None:
+def _diagonal_width(polygon: list) -> float:
+    sums = [x + y for x, y in polygon]
+    diffs = [x - y for x, y in polygon]
+    return max(max(sums) - min(sums), max(diffs) - min(diffs)) / math.sqrt(2)
+
+
+def check_shape(top: TopLayer, shape: Shape) -> None:
     """Confirms the size and the shape of the base, so a line never hangs past its edge."""
-    wanted = "square" if square else "disc"
-    for extent in top.size:
-        if abs(extent - diameter) > _DIAMETER_TOLERANCE:
+    word = _SHAPE_WORDS.get(shape.name, shape.name)
+    for extent, wanted in zip(top.size, (shape.width, shape.height)):
+        if abs(extent - wanted) > _DIAMETER_TOLERANCE:
             raise NotPlaceholder(
-                f"top layer is {top.size[0]:.1f} x {top.size[1]:.1f} mm, expected a {diameter:.1f} mm {wanted}"
+                f"top layer is {top.size[0]:.1f} x {top.size[1]:.1f} mm, expected a {shape.width:.1f} x {shape.height:.1f} mm {word}"
             )
-    if (top.diagonal > _SQUARE_DIAGONAL * diameter) != square:
-        raise NotPlaceholder(f"the top layer does not have the shape of the expected {diameter:.1f} mm {wanted}")
+    if abs(top.diagonal - _diagonal_width(shape.outline())) > _DIAGONAL_TOLERANCE:
+        raise NotPlaceholder(f"the top layer does not have the shape of the expected {shape.width:.1f} mm {word}")
 
 
-def check_bed(top: TopLayer, diameter: float, machine: Machine) -> None:
-    r = diameter / 2
+def check_bed(top: TopLayer, shape: Shape, machine: Machine) -> None:
     cx, cy = top.center
     minx, miny, maxx, maxy = machine.bed
-    if cx - r < minx or cy - r < miny or cx + r > maxx or cy + r > maxy:
-        raise ValueError("The disc reaches outside the printable area.")
+    if cx - shape.half_width < minx or cy - shape.half_height < miny or cx + shape.half_width > maxx or cy + shape.half_height > maxy:
+        raise ValueError("The base reaches outside the printable area.")
 
 
 def replace(lines: list, top: TopLayer, block: list) -> list:

@@ -1,4 +1,4 @@
-"""Toolpaths about the origin, in millimetres. Each is one unbroken polyline."""
+"""Toolpaths about the origin, in millimeters. Each is one unbroken polyline."""
 from __future__ import annotations
 
 import math
@@ -7,11 +7,11 @@ Point = tuple[float, float]
 
 
 def spiral(radius: float, pitch: float, chord: float) -> list[Point]:
-    """Archimedean spiral from the centre outward, with near-constant chord length."""
+    """Archimedean spiral from the center outward, with near-constant chord length."""
     if radius <= pitch:
         raise ValueError("the spiral needs a radius larger than its pitch")
     a = pitch / (2 * math.pi)
-    theta = 2 * math.pi  # starts one pitch from the centre, where the curve is printable
+    theta = 2 * math.pi  # starts one pitch from the center, where the curve is printable
     points = [(a * theta * math.cos(theta), a * theta * math.sin(theta))]
     while True:
         r = a * theta
@@ -76,22 +76,50 @@ def hilbert(half: float, pitch: float, chord: float) -> list[Point]:
     return points
 
 
-def raster(radius: float, pitch: float, chord: float) -> list[Point]:
-    """Serpentine lines clipped to a circle, joined at their ends into one polyline."""
-    if radius <= pitch:
-        raise ValueError("the raster needs a radius larger than its pitch")
-    rows = int(2 * radius / pitch)
+def serpentine(half_height: float, pitch: float, chord: float, span_at) -> list[Point]:
+    """Rows inside a convex shape, joined at their ends into one polyline.
+
+    `span_at(y)` gives a row's (left, right) ends, or None where the shape has no room.
+    """
+    rows = int(2 * half_height / pitch)
     first = (rows * pitch) / 2
     points: list[Point] = []
     for index in range(rows + 1):
         y = first - index * pitch
-        half = math.sqrt(max(radius * radius - y * y, 0.0))
-        if half < chord:
+        span = span_at(y)
+        if span is None or (span[1] - span[0]) / 2 < chord:
             continue
-        ends = ((-half, y), (half, y)) if len(points) == 0 or index % 2 == 0 else ((half, y), (-half, y))
+        ends = ((span[0], y), (span[1], y)) if len(points) == 0 or index % 2 == 0 else ((span[1], y), (span[0], y))
         if points:
             points.extend(_subdivide(points[-1], ends[0], chord))
         else:
             points.append(ends[0])
         points.extend(_subdivide(ends[0], ends[1], chord))
     return points
+
+
+def raster(radius: float, pitch: float, chord: float) -> list[Point]:
+    """Serpentine lines clipped to a circle."""
+    if radius <= pitch:
+        raise ValueError("the raster needs a radius larger than its pitch")
+
+    def span_at(y: float) -> tuple[float, float]:
+        half = math.sqrt(max(radius * radius - y * y, 0.0))
+        return (-half, half)
+
+    return serpentine(radius, pitch, chord, span_at)
+
+
+def rectangular_spiral(half_width: float, half_height: float, pitch: float, chord: float) -> list[Point]:
+    """One line winding at an even pitch from the middle of a rectangle out to its edge."""
+    x0, y0, x1, y1 = -half_width, -half_height, half_width, half_height
+    corners = [(x0, y0)]
+    while x1 - x0 >= pitch and y1 - y0 >= pitch:
+        corners += [(x1, y0), (x1, y1), (x0, y1)]
+        y0 += pitch
+        corners.append((x0, y0))
+        x0, x1, y1 = x0 + pitch, x1 - pitch, y1 - pitch
+    points = [corners[0]]
+    for start, end in zip(corners, corners[1:]):
+        points.extend(_subdivide(start, end, chord))
+    return points[::-1]

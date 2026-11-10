@@ -2,19 +2,8 @@
 from __future__ import annotations
 
 import io
-import math
 import struct
 import zipfile
-
-SEGMENTS = 180
-
-
-def outline(size: float, square: bool) -> list:
-    """Convex counter-clockwise outline around the origin."""
-    half = size / 2
-    if square:
-        return [(-half, -half), (half, -half), (half, half), (-half, half)]
-    return [(half * math.cos(2 * math.pi * i / SEGMENTS), half * math.sin(2 * math.pi * i / SEGMENTS)) for i in range(SEGMENTS)]
 
 
 def _prism(rim: list, bottom: float, top: float) -> list:
@@ -27,9 +16,9 @@ def _prism(rim: list, bottom: float, top: float) -> list:
     return triangles
 
 
-def base_stl(size: float, square: bool, height: float) -> bytes:
+def base_stl(rim: list, height: float) -> bytes:
     """Binary STL of a closed prism standing on z = 0, for a print in one filament."""
-    triangles = _prism(outline(size, square), 0.0, height)
+    triangles = _prism(rim, 0.0, height)
     out = bytearray(b"Flow Line Art placeholder".ljust(80, b"\0"))
     out += struct.pack("<I", len(triangles))
     for triangle in triangles:
@@ -40,9 +29,21 @@ def base_stl(size: float, square: bool, height: float) -> bytes:
     return bytes(out)
 
 
+def _shared_vertices(triangles: list) -> tuple:
+    """Vertices without repeats, and the triangles as indices into them.
+
+    OrcaSlicer's 3MF route keeps a mesh as written, and its slicer joins triangles through
+    shared vertices. Loose triangles shorter than 2 mm are lost when it closes the outlines.
+    """
+    index = {}
+    cells = [tuple(index.setdefault(vertex, len(index)) for vertex in triangle) for triangle in triangles]
+    return list(index), cells
+
+
 def _mesh_object(object_id: int, triangles: list) -> str:
-    points = "".join(f'<vertex x="{x:.6f}" y="{y:.6f}" z="{z:.6f}"/>' for triangle in triangles for x, y, z in triangle)
-    cells = "".join(f'<triangle v1="{i * 3}" v2="{i * 3 + 1}" v3="{i * 3 + 2}"/>' for i in range(len(triangles)))
+    vertices, indexed = _shared_vertices(triangles)
+    points = "".join(f'<vertex x="{x:.6f}" y="{y:.6f}" z="{z:.6f}"/>' for x, y, z in vertices)
+    cells = "".join(f'<triangle v1="{a}" v2="{b}" v3="{c}"/>' for a, b, c in indexed)
     return f'<object id="{object_id}" p:UUID="{_uuid(object_id)}" type="model"><mesh><vertices>{points}</vertices><triangles>{cells}</triangles></mesh></object>'
 
 
@@ -51,8 +52,7 @@ def _uuid(number: int) -> str:
 
 
 def two_filament_3mf(
-    size: float,
-    square: bool,
+    rim: list,
     base_height: float,
     total_height: float,
     base_filament: int,
@@ -66,7 +66,6 @@ def two_filament_3mf(
     and keeps the current presets. `app_version` must be the running version: an older
     tag makes OrcaSlicer show a message about old project files.
     """
-    rim = outline(size, square)
     bottom, top = _prism(rim, 0.0, base_height), _prism(rim, base_height, total_height)
     namespaces = (
         'unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" '

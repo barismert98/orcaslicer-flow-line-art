@@ -131,7 +131,7 @@ def test_state_reports_what_the_presets_say(loaded):
     reply = page_call(loaded, {"cmd": "state"})
     assert reply["type"] == "state" and reply["selected"] is True
     assert reply["printer"]["nozzle"] == pytest.approx(0.4) and reply["printer"]["layer_height"] == pytest.approx(0.2)
-    assert [s["colour"] for s in reply["filaments"]] == ["#FFFFFF", "#101010"] and reply["status"] is None
+    assert [s["color"] for s in reply["filaments"]] == ["#FFFFFF", "#101010"] and reply["status"] is None
 
 
 def test_state_says_when_the_slicing_step_is_missing(loaded):
@@ -169,6 +169,120 @@ def test_empty_last_slice_text_covers_every_printer_and_lives_in_one_place(loade
     expected = "No result yet. Bambu Lab printers: slice the base. Other printers: export the G-code. Then check here."
     assert page.count(expected) == 1
     assert "No slice yet" not in page
+
+
+def test_page_offers_the_relief_mode(loaded):
+    page = loaded.capability(PAGE).get_ui()
+    assert 'data-mode="relief"' in page and '<option value="relief">' in page
+
+
+def test_relief_preview_reports_stops(loaded):
+    config = config_for(BAMBU)
+    harness.set_host(preset_bundle=lambda: harness.fake("orca.host.PresetBundle", full_config_value=config.get))
+    reply = page_call(loaded, {"cmd": "preview", "params": params(mode="relief", art_layers=3, layer_height=0.2), "image": gradient()})
+    assert reply["type"] == "preview" and reply["stats"]["stops"] >= 0
+    assert reply["stack"]["art"] == pytest.approx(0.6)
+
+
+def test_relief_job_saves_a_base_as_tall_as_its_layers(loaded):
+    reply = save_job(loaded, config_for(BAMBU), mode="relief", art_layers=3, base_layers=4, layer_height=0.2)
+    assert reply["type"] == "saved" and reply["height"] == pytest.approx(0.2 * 7, abs=0.11)
+
+
+@pytest.mark.parametrize("value,expected", [("1", True), ("0", False), (None, True)])
+def test_state_reports_the_prime_tower(loaded, value, expected):
+    config = dict(config_for(BAMBU), enable_prime_tower=value)
+    harness.set_host(preset_bundle=lambda: harness.fake("orca.host.PresetBundle", full_config_value=config.get))
+    assert page_call(loaded, {"cmd": "state"})["printer"]["tower"] is expected
+
+
+def test_page_warns_when_the_tower_is_off_with_two_filaments(loaded):
+    assert "Prime tower is off" in loaded.capability(PAGE).get_ui()
+
+
+SLIDER_FIELDS = {"contrast", "gamma", "width_min", "width_max"}
+
+
+def test_only_the_chosen_settings_have_sliders(loaded):
+    page = loaded.capability(PAGE).get_ui()
+    assert set(re.findall(r'id="(\w+)Slider" type="range"', page)) == SLIDER_FIELDS
+    assert ".ol-slider" in page
+
+
+def test_each_slider_shares_a_row_with_its_number(loaded):
+    page = loaded.capability(PAGE).get_ui()
+    for field in SLIDER_FIELDS:
+        row = re.search(rf'<div class="ol-field ol-slider">(?:(?!</div>).)*id="{field}Slider"(?:(?!</div>).)*</div>', page)
+        assert row and f'id="{field}"' in row.group(0)
+
+
+def test_slider_limits_come_from_the_plugin(loaded):
+    config = config_for(BAMBU)
+    harness.set_host(preset_bundle=lambda: harness.fake("orca.host.PresetBundle", full_config_value=config.get))
+    with harness._callback():
+        loaded.capability(PAGE).on_message({"cmd": "init"})
+    limits = next(m for m in harness.posted if m["type"] == "init")["limits"]
+    assert limits["contrast"] == [0.5, 3.0] and limits["gamma"] == [0.2, 3.0]
+    assert limits["width_min_per_nozzle"] == 0.5 and limits["width_max_per_nozzle"] == 2.0 and limits["width_max_per_pitch"] == 1.1
+
+
+@pytest.mark.parametrize("extra", [{"contrast": 3.5}, {"contrast": 0.4}, {"gamma": 3.5}, {"gamma": 0.1}])
+def test_page_refuses_values_past_the_slider_limits(loaded, extra):
+    config = config_for(BAMBU)
+    harness.set_host(preset_bundle=lambda: harness.fake("orca.host.PresetBundle", full_config_value=config.get))
+    assert page_call(loaded, {"cmd": "preview", "params": params(**extra), "image": gradient()})["type"] == "error"
+
+
+def test_page_keeps_gamma_reply_inside_its_slider(loaded):
+    assert page_call(loaded, {"cmd": "gamma", "index": 1, "steps": 32})["value"] == 3.0
+
+
+def test_page_offers_every_shape_and_its_size_fields(loaded):
+    page = loaded.capability(PAGE).get_ui()
+    names = ("square", "circle", "rectangle", "oval", "hexagon")
+    assert tuple(re.findall(r'data-shape="(\w+)"', page)) == names
+    for name in names:
+        assert f'<option value="{name}">' in page
+    for field in ("width", "height", "shape"):
+        assert f'id="{field}"' in page
+    assert 'id="shapeNote"' in page and 'id="sizeRow"' in page and 'id="widthRow"' in page and 'id="heightRow"' in page
+
+
+def test_init_starts_as_a_circle_and_sends_the_shape_table(loaded):
+    config = config_for(BAMBU)
+    harness.set_host(preset_bundle=lambda: harness.fake("orca.host.PresetBundle", full_config_value=config.get))
+    with harness._callback():
+        loaded.capability(PAGE).on_message({"cmd": "init"})
+    init = next(m for m in harness.posted if m["type"] == "init")
+    assert init["params"]["shape"] == "circle" and init["params"]["width"] == init["params"]["diameter"]
+    assert init["shapes"]["shapes_by_mode"]["hilbert"] == ["square"]
+    assert init["shapes"]["two_sizes"] == ["rectangle", "oval"]
+    assert init["shapes"]["unavailable_notes"]["spiral"]
+    used_by_page = set(re.findall(r"shapeTable\.(\w+)", loaded.capability(PAGE).get_ui()))
+    assert used_by_page == set(init["shapes"])
+
+
+def test_saving_a_rectangle_writes_a_rectangular_base(loaded):
+    reply = save_job(loaded, config_for(BAMBU), mode="raster", shape="rectangle", width=80.0, height=50.0, diameter=80.0)
+    assert reply["type"] == "saved"
+
+
+def test_circle_base_record_keeps_its_old_form(loaded):
+    first = save_job(loaded, config_for(BAMBU), shape="circle", width=40.0, height=40.0, on_plate=True)
+    assert first["type"] == "saved"
+    assert loaded.module.base_record(loaded.module.art_module.Params(shape="circle", width=40.0, height=40.0, diameter=40.0), 1.2) == {
+        "diameter": 40.0, "height": 1.2, "square": False, "filaments": [1, 1]
+    }
+
+
+def test_rectangle_base_record_names_its_shape(loaded):
+    record = loaded.module.base_record(loaded.module.art_module.Params(mode="raster", shape="rectangle", width=80.0, height=50.0, diameter=80.0), 1.2)
+    assert record["shape"] == "rectangle" and record["width"] == 80.0 and record["height"] == 50.0
+
+
+def test_page_refuses_a_shape_the_mode_cannot_do(loaded):
+    reply = save_job(loaded, config_for(BAMBU), mode="hilbert", shape="circle", width=40.0, height=40.0)
+    assert reply["type"] == "error"
 
 
 def test_page_has_bridge(loaded):
@@ -225,7 +339,7 @@ def test_page_lists_filaments(loaded):
     with harness._callback():
         loaded.capability(PAGE).on_message({"cmd": "init"})
     slots = next(m for m in harness.posted if m["type"] == "init")["filaments"]
-    assert [s["slot"] for s in slots] == [1, 2] and slots[1]["colour"] == "#101010"
+    assert [s["slot"] for s in slots] == [1, 2] and slots[1]["color"] == "#101010"
 
 
 def test_layer_inputs_set_the_base_height(loaded):
@@ -248,6 +362,7 @@ def test_init_offers_printer_values(loaded):
     sent = next(m for m in harness.posted if m["type"] == "init")["params"]
     assert sent["nozzle"] == pytest.approx(0.4) and sent["layer_height"] == pytest.approx(0.2)
     assert sent["flow"] == 1.0 and sent["art_layers"] == 1
+    assert sent["auto_tone"] is True and sent["contrast"] == 1.2
 
 
 def test_hilbert_job_writes_a_square_base(loaded):

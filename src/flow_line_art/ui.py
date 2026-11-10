@@ -50,19 +50,31 @@ _PAGE = r"""<!doctype html>
         <button type="button" data-mode="spiral">Spiral</button>
         <button type="button" data-mode="raster">Zigzag</button>
         <button type="button" data-mode="hilbert">Hilbert</button>
+        <button type="button" data-mode="relief">Relief</button>
         <button type="button" data-mode="calibration">Calibrate</button>
       </div>
-      <select id="mode" hidden><option value="spiral"></option><option value="raster"></option><option value="hilbert"></option><option value="calibration"></option></select>
+      <select id="mode" hidden><option value="spiral"></option><option value="raster"></option><option value="hilbert"></option><option value="relief"></option><option value="calibration"></option></select>
+      <div class="ol-segments" id="shapes" style="margin-top:8px">
+        <button type="button" data-shape="square">Square</button>
+        <button type="button" data-shape="circle">Circle</button>
+        <button type="button" data-shape="rectangle">Rect</button>
+        <button type="button" data-shape="oval">Oval</button>
+        <button type="button" data-shape="hexagon">Hex</button>
+      </div>
+      <select id="shape" hidden><option value="square">Square</option><option value="circle">Circle</option><option value="rectangle">Rect</option><option value="oval">Oval</option><option value="hexagon">Hexagon</option></select>
+      <div class="ol-muted" id="shapeNote" style="margin-top:6px"></div>
     </div>
     <div class="ol-card">
       <h2>Filaments</h2>
       <label class="ol-field">Base <span class="ol-input ol-select"><i id="baseSwatch"></i><select id="base_filament"></select></span></label>
       <label class="ol-field">Line <span class="ol-input ol-select"><i id="artSwatch"></i><select id="art_filament"></select></span></label>
-      <label class="ol-field" id="pauseRow">Colour change <span class="ol-input ol-select" style="width:150px"><select id="color_change" style="padding-left:8px"><option value="pause">Pause first</option><option value="none">None</option></select></span></label>
+      <label class="ol-field" id="pauseRow">Color change <span class="ol-input ol-select" style="width:150px"><select id="color_change" style="padding-left:8px"><option value="pause">Pause first</option><option value="none">None</option></select></span></label>
     </div>
     <div class="ol-card">
       <h2>Size and layers</h2>
-      <label class="ol-field">Art size <span class="ol-input unit"><input id="diameter" type="number" step="0.1" min="10"><small>mm</small></span></label>
+      <label class="ol-field" id="sizeRow">Art size <span class="ol-input unit"><input id="diameter" type="number" step="0.1" min="10"><small>mm</small></span></label>
+      <label class="ol-field" id="widthRow">Width <span class="ol-input unit"><input id="width" type="number" step="0.1" min="10"><small>mm</small></span></label>
+      <label class="ol-field" id="heightRow">Height <span class="ol-input unit"><input id="height" type="number" step="0.1" min="10"><small>mm</small></span></label>
       <label class="ol-field">Ring width <span class="ol-input unit"><input id="ring" type="number" step="0.5" min="0"><small>mm</small></span></label>
       <label class="ol-field">Layer height <span class="ol-input unit"><input id="layer_height" type="number" step="0.01" min="0.04"><small>mm</small></span></label>
       <label class="ol-field">Nozzle <span class="ol-input unit"><input id="nozzle" type="number" step="0.05" min="0.1" max="1.2"><small>mm</small></span></label>
@@ -74,17 +86,18 @@ _PAGE = r"""<!doctype html>
     <details class="ol-card">
       <summary>Line width, flow and speed</summary>
       <label class="ol-field">Line pitch <span class="ol-input unit"><input id="pitch" type="number" step="0.01" min="0.1"><small>mm</small></span></label>
-      <label class="ol-field">Minimum width <span class="ol-input unit"><input id="width_min" type="number" step="0.01"><small>mm</small></span></label>
-      <label class="ol-field">Maximum width <span class="ol-input unit"><input id="width_max" type="number" step="0.01"><small>mm</small></span></label>
+      <div class="ol-field ol-slider"><span>Min width</span><input id="width_minSlider" type="range" aria-label="Min width slider"><span class="ol-input unit"><input id="width_min" type="number" aria-label="Min width"><small>mm</small></span></div>
+      <div class="ol-field ol-slider"><span>Max width</span><input id="width_maxSlider" type="range" aria-label="Max width slider"><span class="ol-input unit"><input id="width_max" type="number" aria-label="Max width"><small>mm</small></span></div>
       <label class="ol-field">Flow multiplier <span class="ol-input"><input id="flow" type="number" step="0.01" min="0.5" max="1.5"></span></label>
       <label class="ol-field">Print speed <span class="ol-input unit"><input id="speed" type="number" step="1" min="1"><small>mm/s</small></span></label>
       <label class="ol-field">Width change limit <span class="ol-input"><input id="slew" type="number" step="0.01" min="0.01"></span></label>
     </details>
     <details class="ol-card">
-      <summary>Tone: invert, contrast, gamma</summary>
+      <summary>Tone: automatic, invert, contrast, gamma</summary>
+      <label class="ol-field">Automatic tone <input id="auto_tone" type="checkbox"></label>
       <label class="ol-field">Invert <input id="invert" type="checkbox"></label>
-      <label class="ol-field">Contrast <span class="ol-input"><input id="contrast" type="number" step="0.1" min="0.1"></span></label>
-      <label class="ol-field">Gamma <span class="ol-input"><input id="gamma" type="number" step="0.05" min="0.1"></span></label>
+      <div class="ol-field ol-slider"><span>Contrast</span><input id="contrastSlider" type="range" aria-label="Contrast slider"><span class="ol-input"><input id="contrast" type="number" aria-label="Contrast"></span></div>
+      <div class="ol-field ol-slider"><span>Gamma</span><input id="gammaSlider" type="range" aria-label="Gamma slider"><span class="ol-input"><input id="gamma" type="number" aria-label="Gamma"></span></div>
     </details>
     <div class="ol-card" id="calib" hidden>
       <h2>Calibration</h2>
@@ -117,7 +130,7 @@ _PAGE = r"""<!doctype html>
       <div class="ol-metric"><span class="ol-muted">Line width</span><b id="mWidth">-</b></div>
       <div class="ol-metric"><span class="ol-muted">Peak flow</span><b id="mFlow">-</b></div>
     </div>
-    <div class="ol-muted" id="hilbertNote"></div>
+    <div class="ol-muted" id="modeNote"></div>
   </div>
 
   <div class="status">
@@ -139,10 +152,15 @@ _PAGE = r"""<!doctype html>
   </div>
 </form>
 <script>
-var fields = ["mode","base_filament","art_filament","color_change","diameter","nozzle","layer_height","base_layers","art_layers","flow","ring","pitch","width_min","width_max","speed","slew","invert","contrast","gamma","steps"];
+var fields = ["mode","shape","width","height","base_filament","art_filament","color_change","diameter","nozzle","layer_height","base_layers","art_layers","flow","ring","pitch","width_min","width_max","speed","slew","auto_tone","invert","contrast","gamma","steps"];
 var image = null, timer = null, ready = false, snapSize = false;
 var source = null, encodeTimer = null, filaments = [], filamentKey = "";
-var printer = null, selected = null;
+var printer = null, selected = null, limits = null, shapeTable = null;
+var RECTANGLE_HEIGHT_PER_WIDTH = 0.625;  // a new rectangle or oval should look like one, not a square
+var SLIDER_STEPS = { width_min: 0.01, width_max: 0.01, contrast: 0.05, gamma: 0.01 };
+var SLIDER_FIELDS = Object.keys(SLIDER_STEPS);
+var WIDTH_GAP = 0.01;  // the two widths must differ, or the validation refuses them
+var RELIEF_LAYERS = 3;  // a first choice for the darkest parts: the line plus two raised passes
 // Slicing alone only runs the plugin on Bambu Lab printers; others run it at export or upload.
 var NO_RESULT_TEXT = "No result yet. Bambu Lab printers: slice the base. Other printers: export the G-code. Then check here.";
 var send = function (m) { window.orca.postMessage(m); };
@@ -156,6 +174,8 @@ function params() {
     var e = el(f);
     p[f] = e.type === "checkbox" ? e.checked : (e.tagName === "SELECT" ? e.value : parseFloat(e.value));
   });
+  if (hasTwoSizes()) p.diameter = Math.max(p.width, p.height);
+  else { p.width = p.diameter; p.height = p.diameter; }
   p.margin = 0.4; p.chord = 0.5;
   return p;
 }
@@ -184,8 +204,8 @@ function showFilaments() {
   el("pauseRow").hidden = el("base_filament").value !== el("art_filament").value;
   el("pauseRow").style.display = el("pauseRow").hidden ? "none" : "";
   var base = filamentAt("base_filament"), art = filamentAt("art_filament");
-  if (base) { el("baseSwatch").style.background = base.colour; el("stackBase").style.background = base.colour; }
-  if (art) { el("artSwatch").style.background = art.colour; el("stackArt").style.background = art.colour; }
+  if (base) { el("baseSwatch").style.background = base.color; el("stackBase").style.background = base.color; }
+  if (art) { el("artSwatch").style.background = art.color; el("stackArt").style.background = art.color; }
 }
 
 function luminance(hex) {
@@ -199,12 +219,80 @@ function setParams(p) {
     if (e.type === "checkbox") e.checked = !!p[f]; else e.value = p[f];
   });
   el("midstep").value = Math.round(p.steps / 2);
+  applyLimits();
+  SLIDER_FIELDS.forEach(settle);
+}
+
+function setRange(id, low, high) {
+  [el(id), el(id + "Slider")].forEach(function (e) { e.min = low.toFixed(2); e.max = high.toFixed(2); e.step = SLIDER_STEPS[id]; });
+}
+
+function applyLimits() {
+  var nozzle = parseFloat(el("nozzle").value), pitch = parseFloat(el("pitch").value);
+  var low = Math.ceil(nozzle * limits.width_min_per_nozzle * 100 - 1e-6) / 100;
+  var high = Math.floor(Math.min(nozzle * limits.width_max_per_nozzle, pitch * limits.width_max_per_pitch) * 100 + 1e-6) / 100;
+  setRange("width_min", low, high - WIDTH_GAP);
+  setRange("width_max", low + WIDTH_GAP, high);
+  setRange("contrast", limits.contrast[0], limits.contrast[1]);
+  setRange("gamma", limits.gamma[0], limits.gamma[1]);
+}
+
+// Clamps and snaps the number, then copies it to the slider. Returns true when the value moved.
+function settle(id) {
+  var e = el(id), wanted = parseFloat(e.value), step = SLIDER_STEPS[id];
+  var fallback = isNaN(wanted) ? parseFloat(el(id + "Slider").value) : wanted;
+  var value = (Math.round(Math.min(parseFloat(e.max), Math.max(parseFloat(e.min), fallback)) / step) * step).toFixed(2);
+  e.value = value;
+  el(id + "Slider").value = value;
+  return Math.abs(parseFloat(value) - fallback) > 1e-6 || isNaN(wanted);
+}
+
+function keepWidthsApart(changed) {
+  var low = parseFloat(el("width_min").value), high = parseFloat(el("width_max").value);
+  if (low + WIDTH_GAP / 2 < high) return;
+  if (changed === "width_max") el("width_min").value = (high - WIDTH_GAP).toFixed(2);
+  else el("width_max").value = (low + WIDTH_GAP).toFixed(2);
+  ["width_min", "width_max"].forEach(settle);
+}
+
+function settleAll() {
+  var moved = SLIDER_FIELDS.filter(settle);
+  keepWidthsApart("width_min");
+  if (moved.length) msg("Adjusted to the limits: " + moved.join(", ").replace(/_/g, " ") + ".");
+}
+
+function refreshLimits() { applyLimits(); settleAll(); }
+
+function hasTwoSizes() { return !!shapeTable && shapeTable.two_sizes.indexOf(el("shape").value) >= 0; }
+
+function shapeAspect() {
+  if (hasTwoSizes()) return (parseFloat(el("width").value) / parseFloat(el("height").value)) || 1;
+  return el("shape").value === "hexagon" ? 2 / Math.sqrt(3) : 1;
+}
+
+function showRow(id, visible) { el(id).style.display = visible ? "" : "none"; }
+
+function showShape(mode) {
+  var modeShapes = shapeTable.shapes_by_mode[mode];
+  if (modeShapes.indexOf(el("shape").value) < 0) el("shape").value = modeShapes[0];
+  var unavailableNote = shapeTable.unavailable_notes[mode];
+  Array.prototype.forEach.call(el("shapes").children, function (b) {
+    b.disabled = modeShapes.indexOf(b.dataset.shape) < 0;
+    b.title = b.disabled ? unavailableNote : "";
+    b.className = b.dataset.shape === el("shape").value ? "on" : "";
+  });
+  el("shapeNote").textContent = modeShapes.length < shapeTable.shapes_by_mode.raster.length ? unavailableNote : "";
+  showRow("sizeRow", !hasTwoSizes());
+  showRow("widthRow", hasTwoSizes());
+  showRow("heightRow", hasTwoSizes());
 }
 
 function showMode() {
   var mode = el("mode").value;
   Array.prototype.forEach.call(el("modes").children, function (b) { b.className = b.dataset.mode === mode ? "on" : ""; });
   el("calib").hidden = mode !== "calibration";
+  showShape(mode);
+  ["contrastSlider", "gammaSlider"].forEach(function (id) { el(id).disabled = mode === "calibration"; });
 }
 
 function check(done, title, detail) {
@@ -238,9 +326,13 @@ function renderChecks() {
   }
   var base = filamentAt("base_filament"), art = filamentAt("art_filament");
   if (base && art && el("base_filament").value !== el("art_filament").value) {
-    var dark = luminance(art.colour) < luminance(base.colour), invert = el("invert").checked, good = dark !== invert;
-    check(good, good ? "Tone suits the filament colours" : (invert ? "Turn Invert off" : "Turn Invert on"),
+    var dark = luminance(art.color) < luminance(base.color), invert = el("invert").checked, good = dark !== invert;
+    check(good, good ? "Tone suits the filament colors" : (invert ? "Turn Invert off" : "Turn Invert on"),
       good ? "" : (invert ? "The line filament is darker than the base." : "The line filament is lighter than the base, so the picture would be a negative."));
+    if (printer) {
+      check(printer.tower, printer.tower ? "Prime tower is on" : "Prime tower is off",
+        printer.tower ? "" : "Without it the color change purges too little and the line can start in the old color. Process preset, Multimaterial: enable it.");
+    }
   }
 }
 
@@ -308,8 +400,8 @@ function applyState(m) {
 
 window.orca.onMessage(function (m) {
   if (m.type === "init") {
-    fillFilaments(m.filaments); setParams(m.params); showFilaments(); ready = true; showMode(); msg("");
-    applyState({ printer: { nozzle: m.machine.nozzle, layer_height: m.machine.layer_height }, selected: m.selected });
+    limits = m.limits; shapeTable = m.shapes; fillFilaments(m.filaments); setParams(m.params); showFilaments(); ready = true; showMode(); msg("");
+    applyState({ printer: m.printer, selected: m.selected });
     request();
   } else if (m.type === "state") {
     applyState(m);
@@ -325,8 +417,9 @@ window.orca.onMessage(function (m) {
     renderStack(m.stack);
     renderMetrics(m.stats);
     applyState(m);
-    el("hilbertNote").textContent = m.hilbert ?
-      "Line pitch here: " + m.hilbert.pitch.toFixed(2) + " mm. Sizes that keep your pitch: " + m.hilbert.sizes.join(", ") + " mm" : "";
+    el("modeNote").textContent = m.hilbert ?
+      "Line pitch here: " + m.hilbert.pitch.toFixed(2) + " mm. Sizes that keep your pitch: " + m.hilbert.sizes.join(", ") + " mm" :
+      (m.stats.stops ? "The raised layers lift and cross " + m.stats.stops + " times." : "");
   } else if (m.type === "saved") {
     var notes = {
       added: "Saved. The base is being added to the plate; slice it when it appears.",
@@ -337,7 +430,7 @@ window.orca.onMessage(function (m) {
     msg(notes[m.plate], m.plate === "stale");
     el("path").textContent = m.plate === "manual" ? m.stl : "";
   } else if (m.type === "gamma") {
-    el("gamma").value = m.value; request();
+    el("gamma").value = m.value; settle("gamma"); request();
   } else if (m.type === "status") {
     renderStatus(m.status);
   } else if (m.type === "error") {
@@ -351,33 +444,45 @@ function num(id, low, high, fallback) {
 }
 
 function cropBox() {
-  var whole = Math.min(source.width, source.height), side = whole / num("zoom", 1, 8, 1);
-  var freeX = (source.width - side) / 2, freeY = (source.height - side) / 2;
-  return { side: side, freeX: freeX, freeY: freeY,
+  var aspect = shapeAspect(), w = Math.min(source.width, source.height * aspect) / num("zoom", 1, 8, 1), h = w / aspect;
+  var freeX = (source.width - w) / 2, freeY = (source.height - h) / 2;
+  return { w: w, h: h, freeX: freeX, freeY: freeY,
     x: freeX + freeX * num("panx", -100, 100, 0) / 100, y: freeY + freeY * num("pany", -100, 100, 0) / 100 };
 }
 
 function drawCrop() {
   if (!source) return;
-  var c = el("crop"), g = c.getContext("2d"), b = cropBox(), n = c.width;
-  g.drawImage(source, b.x, b.y, b.side, b.side, 0, 0, n, n);
-  if (el("mode").value !== "hilbert" && el("mode").value !== "calibration") {
-    g.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue("--orca-accent") || "#009688";
-    g.lineWidth = 4; g.beginPath(); g.arc(n / 2, n / 2, n / 2 - 2, 0, 7); g.stroke();
+  var c = el("crop"), g = c.getContext("2d"), b = cropBox(), n = c.width, aspect = shapeAspect();
+  var w = n * Math.min(1, aspect), h = n * Math.min(1, 1 / aspect);
+  g.clearRect(0, 0, n, n);
+  g.drawImage(source, b.x, b.y, b.w, b.h, (n - w) / 2, (n - h) / 2, w, h);
+  var shape = el("shape").value;
+  if (shape === "square" || shape === "rectangle") return;
+  g.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue("--orca-accent") || "#009688";
+  g.lineWidth = 4; g.beginPath();
+  if (shape === "hexagon") {
+    for (var i = 0; i < 6; i++) g.lineTo(n / 2 + (w / 2 - 2) * Math.cos(i * Math.PI / 3), n / 2 + (w / 2 - 2) * Math.sin(i * Math.PI / 3));
+    g.closePath();
+  } else {
+    g.ellipse(n / 2, n / 2, w / 2 - 2, h / 2 - 2, 0, 0, 7);
   }
+  g.stroke();
 }
+
+var MAX_ENCODED_SIDE = 600;
 
 function encode() {
   clearTimeout(encodeTimer); encodeTimer = null;
   if (!source) return;
-  var b = cropBox(), target = Math.min(Math.round(b.side), 600);
-  var c = document.createElement("canvas"); c.width = target; c.height = target;
+  var b = cropBox(), fit = Math.min(1, MAX_ENCODED_SIDE / Math.max(b.w, b.h));
+  var targetW = Math.max(1, Math.round(b.w * fit)), targetH = Math.max(1, Math.round(b.h * fit));
+  var c = document.createElement("canvas"); c.width = targetW; c.height = targetH;
   var g = c.getContext("2d");
-  g.drawImage(source, b.x, b.y, b.side, b.side, 0, 0, target, target);
-  var d = g.getImageData(0, 0, target, target).data, out = new Uint8Array(target * target);
+  g.drawImage(source, b.x, b.y, b.w, b.h, 0, 0, targetW, targetH);
+  var d = g.getImageData(0, 0, targetW, targetH).data, out = new Uint8Array(targetW * targetH);
   for (var i = 0; i < out.length; i++) out[i] = Math.round(0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2]);
   var s = ""; for (var k = 0; k < out.length; k += 8192) s += String.fromCharCode.apply(null, out.subarray(k, k + 8192));
-  image = { width: target, height: target, data: btoa(s) };
+  image = { width: targetW, height: targetH, data: btoa(s) };
   renderChecks();
   request();
 }
@@ -398,7 +503,7 @@ el("crop").addEventListener("pointerdown", function (ev) {
 });
 el("crop").addEventListener("pointermove", function (ev) {
   if (!drag) return;
-  var b = cropBox(), scale = b.side / el("crop").clientWidth;
+  var b = cropBox(), scale = b.w / (el("crop").clientWidth * Math.min(1, shapeAspect()));
   if (b.freeX > 0) el("panx").value = Math.round(Math.min(100, Math.max(-100, drag.panx - (ev.clientX - drag.x) * scale / b.freeX * 100)));
   if (b.freeY > 0) el("pany").value = Math.round(Math.min(100, Math.max(-100, drag.pany - (ev.clientY - drag.y) * scale / b.freeY * 100)));
   moved();
@@ -418,7 +523,21 @@ el("nozzle").addEventListener("change", function () {
   el("width_min").value = (n * 0.6).toFixed(2);
   el("width_max").value = (n * 1.6).toFixed(2);
   el("pitch").value = (n * 1.625).toFixed(2);
+  refreshLimits();
   request();
+});
+el("pitch").addEventListener("change", refreshLimits);
+
+SLIDER_FIELDS.forEach(function (id) {
+  el(id + "Slider").addEventListener("input", function () {
+    el(id).value = parseFloat(el(id + "Slider").value).toFixed(2);
+    keepWidthsApart(id);
+    request();
+  });
+  el(id).addEventListener("change", function () {
+    if (settle(id)) msg(id.replace(/_/g, " ") + " adjusted to the limits.");
+    keepWidthsApart(id);
+  });
 });
 
 el("file").addEventListener("change", function (ev) {
@@ -447,7 +566,23 @@ Array.prototype.forEach.call(el("modes").children, function (b) {
   });
 });
 fields.forEach(function (f) { el(f).addEventListener("change", function () { showMode(); renderChecks(); request(); }); });
-el("mode").addEventListener("change", function () { snapSize = el("mode").value === "hilbert"; drawCrop(); });
+el("mode").addEventListener("change", function () {
+  snapSize = el("mode").value === "hilbert";
+  if (el("mode").value === "relief" && parseInt(el("art_layers").value, 10) < 2) el("art_layers").value = RELIEF_LAYERS;
+  moved();
+});
+Array.prototype.forEach.call(el("shapes").children, function (b) {
+  b.addEventListener("click", function () {
+    el("shape").value = b.dataset.shape;
+    el("shape").dispatchEvent(new Event("change"));
+  });
+});
+el("shape").addEventListener("change", function () {
+  var width = parseFloat(el("width").value), height = parseFloat(el("height").value);
+  if (hasTwoSizes() && width === height) el("height").value = (width * RECTANGLE_HEIGHT_PER_WIDTH).toFixed(1);
+  moved();
+});
+["width", "height", "diameter"].forEach(function (id) { el(id).addEventListener("change", moved); });
 el("save").addEventListener("click", function () { if (encodeTimer !== null) encode(); send({ cmd: "save", params: params(), image: image }); });
 el("refresh").addEventListener("click", function () { send({ cmd: "state" }); });
 el("useStep").addEventListener("click", function () {

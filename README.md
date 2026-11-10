@@ -6,7 +6,7 @@
 
 Also on [Orca Cloud](https://cloud.orcaslicer.com/app/plugins/shared-plugins/363402d5-9018-4242-919f-a4341146d616).
 
-Upload any photo and get a disc printed as a single unbroken spiral. The picture appears because the line swells and thins, with no colour changes inside the picture.
+Upload any photo and get a disc printed as a single unbroken spiral. The picture appears because the line swells and thins, with no color changes inside the picture.
 
 **How to use**
 1. Open the Flow Line Art tab and pick an image. Drag it to position it, scroll to zoom.
@@ -49,3 +49,7 @@ Has a picture that did not come out well? Leave a comment with a photo of the pr
 Download the `.whl` file from the [latest release](../../releases/latest) and install it from the Plugins menu in OrcaSlicer, or subscribe on Orca Cloud.
 
 Requires OrcaSlicer 2.5.0 or later. Licence: GPL-3.0-or-later.
+
+![A Relief test print, 60 mm, in raking light](docs/images/relief-print.jpg)
+
+Relief is experimental: it has had one test print, and the raised areas are rougher than the flat modes.

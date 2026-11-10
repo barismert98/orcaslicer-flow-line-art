@@ -25,13 +25,20 @@ class GrayImage:
         return base64.b64encode(self.data).decode("ascii")
 
     def center_square(self) -> "GrayImage":
-        side = min(self.width, self.height)
-        if self.width == self.height:
+        return self.center_crop(1.0)
+
+    def center_crop(self, aspect: float) -> "GrayImage":
+        """The largest centered part with this width-to-height ratio; the picture is cut, not squeezed."""
+        if self.width == self.height * aspect:
             return self
-        left = (self.width - side) // 2
-        top = (self.height - side) // 2
-        rows = (self.data[(top + y) * self.width + left:(top + y) * self.width + left + side] for y in range(side))
-        return GrayImage(side, side, b"".join(rows))
+        if self.width > self.height * aspect:
+            width, height = max(1, round(self.height * aspect)), self.height
+        else:
+            width, height = self.width, max(1, round(self.width / aspect))
+        left = (self.width - width) // 2
+        top = (self.height - height) // 2
+        rows = (self.data[(top + y) * self.width + left:(top + y) * self.width + left + width] for y in range(height))
+        return GrayImage(width, height, b"".join(rows))
 
     def sample(self, u: float, v: float) -> float:
         """Brightness 0..1 at u, v in 0..1; v grows downward."""

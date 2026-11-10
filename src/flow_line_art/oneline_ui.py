@@ -1,4 +1,4 @@
-"""OneLine family look: the reusable style block. Every colour derives from OrcaSlicer's theme."""
+"""OneLine family look: the reusable style block. Every color derives from OrcaSlicer's theme."""
 
 CSS = r"""
 :root {
@@ -25,6 +25,12 @@ h2 { font-size: var(--ol-small); font-weight: 600; margin: 0 0 var(--ol-gap); co
 .ol-card { background: var(--ol-surface); border: 1px solid var(--ol-line); border-radius: var(--ol-radius); padding: var(--ol-pad); }
 .ol-field { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: var(--ol-control); margin-bottom: 6px; }
 .ol-field:last-child { margin-bottom: 0; }
+.ol-field.ol-slider { display: grid; grid-template-columns: 96px minmax(0, 1fr) 104px; gap: 10px; }
+.ol-slider input[type=range] { -webkit-appearance: none; width: 100%; height: var(--ol-control); margin: 0; background: transparent; }
+.ol-slider input::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: var(--orca-border); }
+.ol-slider input::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%; background: var(--orca-accent); }
+.ol-slider input:focus-visible { outline: 2px solid var(--orca-accent); }
+.ol-slider input:disabled { opacity: .5; }
 .ol-input { position: relative; flex: none; width: 104px; height: var(--ol-control); }
 .ol-input input, .ol-input select { width: 100%; height: 100%; padding: 0 8px; background: var(--orca-bg); color: var(--orca-fg); border: 1px solid var(--orca-border); border-radius: var(--ol-radius); font: inherit; }
 .ol-input small { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: var(--orca-muted); font-size: 11px; pointer-events: none; }
@@ -36,6 +42,7 @@ h2 { font-size: var(--ol-small); font-weight: 600; margin: 0 0 var(--ol-gap); co
 .ol-segments { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border: 1px solid var(--orca-border); border-radius: var(--ol-radius); overflow: hidden; }
 .ol-segments button { height: var(--ol-control); border: 0; border-left: 1px solid var(--orca-border); background: transparent; color: var(--orca-fg); font: inherit; cursor: pointer; }
 .ol-segments button:first-child { border-left: 0; }
+.ol-segments button:disabled { opacity: .4; cursor: not-allowed; }
 .ol-segments button.on { background: var(--orca-accent); color: var(--orca-accent-fg); }
 .ol-button { min-height: 36px; width: 100%; padding: 0 16px; border: 0; border-radius: var(--ol-radius); background: var(--orca-accent); color: var(--orca-accent-fg); font: 600 var(--ol-text) var(--orca-font); cursor: pointer; }
 .ol-button.quiet { display: flex; align-items: center; justify-content: center; background: transparent; color: var(--orca-fg); border: 1px solid var(--orca-border); font-weight: 400; }

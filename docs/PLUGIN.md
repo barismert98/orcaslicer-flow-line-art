@@ -1,6 +1,6 @@
 # Flow Line Art
 
-Upload any photo and get a disc printed as a single unbroken spiral. The picture appears because the line swells and thins, with no colour changes inside the picture.
+Upload any photo and get a disc printed as a single unbroken spiral. The picture appears because the line swells and thins, with no color changes inside the picture.
 
 **How to use**
 1. Open the Flow Line Art tab and pick an image. Drag it to position it, scroll to zoom.
@@ -15,7 +15,10 @@ The picture is made when you slice. Flow Line Art adds a slicing step that finds
 **What it does**
 - Draws the picture as one continuous line, with no travel moves inside the art.
 - Changes only the filament flow along the line, at a constant speed, within your filament's volumetric limit.
-- Spiral on a disc, zigzag lines, or a Hilbert curve on a square base.
+- Spiral, zigzag lines, or a Hilbert curve on a square base.
+- Choose the outer shape: square, circle, rectangle, oval or hexagon. Zigzag fits them all, Spiral and Relief fit a circle, square or rectangle, and Hilbert needs a square.
+- Relief: darker parts of the picture print as more stacked passes of the line, so the disc gains depth in raking light. Choose 2 to 6 line layers.
+- Automatic tone stretches the picture over its real light-to-dark range. You can turn it off, and contrast, gamma and the line width range have sliders.
 - Separate filaments for the base and the art, or one filament with a pause to swap it.
 - One or more art layers, which retrace the same line.
 - Calibration pattern, to match tones to your filaments.
