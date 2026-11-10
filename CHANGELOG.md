@@ -24,3 +24,4 @@
 - 2026-11-10: 1.4.3: the shape table's keys are now `shapes_by_mode` and `unavailable_notes`, and three docstrings are restated as plain description. Two comment typos from 1.4.2 ("centerd") are fixed. The tab's text and the G-code are unchanged.
 - 2026-11-10: 1.4.4: the comment on the shape list now describes what the tuple holds. No change to the tab or the G-code.
 - 2026-11-10: 1.4.5: rounded rectangle removed, five shapes remain in the same order. A saved job naming it stops with a clear message. The G-code of the remaining shapes is unchanged.
+- 2026-11-10: 1.4.5 published on Orca Cloud (low risk, no review flag) and on GitHub as release v1.4.5. Relief printed rough and is marked experimental on the page.

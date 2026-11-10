@@ -48,7 +48,7 @@ Has a picture that did not come out well? Leave a comment with a photo of the pr
 ## Install
 Download the `.whl` file from the [latest release](../../releases/latest) and install it from the Plugins menu in OrcaSlicer, or subscribe on Orca Cloud.
 
-Requires OrcaSlicer 2.5.0 or later. Licence: GPL-3.0-or-later.
+Requires OrcaSlicer 2.5.0 or later. License: GPL-3.0-or-later.
 
 ![A Relief test print, 60 mm, in raking light](docs/images/relief-print.jpg)
 
